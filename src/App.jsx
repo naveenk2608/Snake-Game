@@ -1,16 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  createGame,
-  DIRECTIONS,
-  GRID_SIZE,
-  queueTurn,
-  step,
-  tickDuration,
-} from './game/snake.js'
+import { autopilot, createGame, queueTurn, step, tickDuration } from './game/snake.js'
+import { createRenderer } from './game/renderer.js'
 import './App.css'
 
 const BEST_SCORE_KEY = 'snake-best-score'
 const SWIPE_THRESHOLD_PX = 24
+// How long the start-screen demo lingers on its crash before starting over.
+const DEMO_RESTART_MS = 1200
 
 const KEY_DIRECTIONS = {
   ArrowUp: 'up',
@@ -39,82 +35,12 @@ function saveBestScore(value) {
   }
 }
 
-// Board colors live in CSS custom properties so light and dark themes are
-// defined in one place.
-function readColors(element) {
-  const style = getComputedStyle(element)
-  const get = (name) => style.getPropertyValue(name).trim()
-  return {
-    board: get('--board'),
-    boardAlt: get('--board-alt'),
-    snake: get('--snake'),
-    head: get('--snake-head'),
-    food: get('--food'),
-    crash: get('--crash'),
-  }
-}
-
-function drawGame(canvas, game, colors) {
-  const ctx = canvas.getContext('2d')
-  const cell = canvas.width / GRID_SIZE
-
-  ctx.fillStyle = colors.board
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
-  ctx.fillStyle = colors.boardAlt
-  for (let y = 0; y < GRID_SIZE; y++) {
-    for (let x = 0; x < GRID_SIZE; x++) {
-      if ((x + y) % 2) ctx.fillRect(x * cell, y * cell, cell, cell)
-    }
-  }
-
-  if (game.food) {
-    ctx.fillStyle = colors.food
-    ctx.beginPath()
-    ctx.arc(
-      (game.food.x + 0.5) * cell,
-      (game.food.y + 0.5) * cell,
-      cell * 0.34,
-      0,
-      Math.PI * 2,
-    )
-    ctx.fill()
-  }
-
-  const inset = cell * 0.08
-  const crashed = game.over && !game.won
-  // Draw tail first so the head always sits on top.
-  for (let i = game.snake.length - 1; i >= 0; i--) {
-    const part = game.snake[i]
-    const isHead = i === 0
-    ctx.fillStyle = isHead ? (crashed ? colors.crash : colors.head) : colors.snake
-    ctx.beginPath()
-    ctx.roundRect(
-      part.x * cell + inset,
-      part.y * cell + inset,
-      cell - inset * 2,
-      cell - inset * 2,
-      cell * (isHead ? 0.38 : 0.26),
-    )
-    ctx.fill()
-  }
-
-  // Eyes point in the direction of travel.
-  const head = game.snake[0]
-  const { x: dx, y: dy } = DIRECTIONS[game.direction]
-  const cx = (head.x + 0.5) * cell
-  const cy = (head.y + 0.5) * cell
-  ctx.fillStyle = colors.board
-  for (const side of [-1, 1]) {
-    ctx.beginPath()
-    ctx.arc(
-      cx + dx * cell * 0.16 - dy * side * cell * 0.17,
-      cy + dy * cell * 0.16 + dx * side * cell * 0.17,
-      cell * 0.08,
-      0,
-      Math.PI * 2,
-    )
-    ctx.fill()
-  }
+// Everything the animation loop changes each frame lives in one plain object,
+// outside React state, so the board can animate at 60fps without re-rendering.
+function createSimulation({ demo, direction } = {}) {
+  let game = createGame()
+  if (direction) game = queueTurn(game, direction)
+  return { game, prevSnake: game.snake, elapsed: 0, demo: Boolean(demo), demoRestartAt: 0 }
 }
 
 function Arrow({ rotate }) {
@@ -140,135 +66,144 @@ function Arrow({ rotate }) {
 
 export default function App() {
   const canvasRef = useRef(null)
-  const colorsRef = useRef(null)
+  const rendererRef = useRef(null)
   const touchStartRef = useRef(null)
-  const gameRef = useRef(null)
-  if (gameRef.current === null) gameRef.current = createGame()
+  const simRef = useRef(null)
+  if (simRef.current === null) simRef.current = createSimulation({ demo: true })
 
   // ready | playing | paused | over
   const [status, setStatus] = useState('ready')
+  const statusRef = useRef('ready')
   const [score, setScore] = useState(0)
   const [best, setBest] = useState(loadBestScore)
   const [newRecord, setNewRecord] = useState(false)
   const [won, setWon] = useState(false)
   const bestRef = useRef(best)
 
+  // The loop reads status from a ref so it never has to restart.
+  const changeStatus = useCallback((next) => {
+    statusRef.current = next
+    setStatus(next)
+  }, [])
+
   useEffect(() => {
     bestRef.current = best
     saveBestScore(best)
   }, [best])
 
-  const draw = useCallback(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    colorsRef.current ??= readColors(canvas)
-    drawGame(canvas, gameRef.current, colorsRef.current)
-  }, [])
-
-  // Keep the canvas pixel-sharp at any size, and repaint when the OS theme flips.
+  // One animation loop for the lifetime of the page: it advances the game on
+  // each tick and repaints every frame so effects keep moving between ticks.
   useEffect(() => {
     const canvas = canvasRef.current
-    const resize = () => {
-      const pixels = canvas.clientWidth * window.devicePixelRatio
-      // A multiple of the grid size keeps every cell on whole pixels.
-      const size = Math.max(GRID_SIZE, Math.round(pixels / GRID_SIZE) * GRID_SIZE)
-      if (canvas.width !== size) {
-        canvas.width = size
-        canvas.height = size
-      }
-      draw()
-    }
-    const observer = new ResizeObserver(resize)
+    const renderer = createRenderer(canvas)
+    rendererRef.current = renderer
+
+    const observer = new ResizeObserver(() => {
+      renderer.resize(canvas.clientWidth * window.devicePixelRatio)
+    })
     observer.observe(canvas)
 
-    const scheme = window.matchMedia('(prefers-color-scheme: dark)')
-    const onSchemeChange = () => {
-      colorsRef.current = null
-      draw()
-    }
-    scheme.addEventListener('change', onSchemeChange)
+    const advance = (sim, now) => {
+      const before = sim.demo ? queueTurn(sim.game, autopilot(sim.game)) : sim.game
+      const next = step(before)
+      sim.prevSnake = next.over ? next.snake : before.snake
+      sim.game = next
 
-    return () => {
-      observer.disconnect()
-      scheme.removeEventListener('change', onSchemeChange)
-    }
-  }, [draw])
+      if (next.score > before.score) {
+        renderer.eat(before.food, next.food, now + tickDuration(next.score))
+        if (!sim.demo) setScore(next.score)
+      }
+      if (!next.over) return
 
-  // Game loop: runs only while playing.
-  useEffect(() => {
-    if (status !== 'playing') return
+      if (next.won) renderer.celebrate(next.snake)
+      else renderer.crash(next.snake[0], { quiet: sim.demo })
+
+      if (sim.demo) {
+        sim.demoRestartAt = now + DEMO_RESTART_MS
+        return
+      }
+      const record = next.score > bestRef.current
+      setNewRecord(record)
+      if (record) setBest(next.score)
+      setWon(next.won)
+      changeStatus('over')
+    }
 
     let frame
     let last = performance.now()
-    let elapsed = 0
-
     const loop = (now) => {
-      elapsed += now - last
+      const dt = Math.min(now - last, 100)
       last = now
+      const status = statusRef.current
 
-      const tick = tickDuration(gameRef.current.score)
-      if (elapsed >= tick) {
-        // Carry the remainder, but never bank more than one extra tick.
-        elapsed = Math.min(elapsed - tick, tick)
-        const game = step(gameRef.current)
-        gameRef.current = game
-        draw()
-        setScore(game.score)
+      if (status === 'ready' && simRef.current.game.over && now >= simRef.current.demoRestartAt) {
+        simRef.current = createSimulation({ demo: true })
+        renderer.reset()
+      }
 
-        if (game.over) {
-          const record = game.score > bestRef.current
-          setNewRecord(record)
-          setWon(game.won)
-          if (record) setBest(game.score)
-          setStatus('over')
-          return
+      const sim = simRef.current
+      const running = !sim.game.over && (status === 'playing' || (status === 'ready' && sim.demo))
+      if (running) {
+        sim.elapsed += dt
+        const tick = tickDuration(sim.game.score)
+        if (sim.elapsed >= tick) {
+          // Carry the remainder, but never bank more than one extra tick.
+          sim.elapsed = Math.min(sim.elapsed - tick, tick)
+          advance(sim, now)
         }
       }
+
+      const progress = sim.game.over ? 1 : Math.min(1, sim.elapsed / tickDuration(sim.game.score))
+      renderer.draw(sim.game, sim.prevSnake, progress, now)
       frame = requestAnimationFrame(loop)
     }
     frame = requestAnimationFrame(loop)
 
-    // Pause automatically when the tab is hidden.
-    const onVisibility = () => {
-      if (document.hidden) setStatus('paused')
-    }
-    document.addEventListener('visibilitychange', onVisibility)
-
     return () => {
       cancelAnimationFrame(frame)
-      document.removeEventListener('visibilitychange', onVisibility)
+      observer.disconnect()
     }
-  }, [status, draw])
+  }, [changeStatus])
+
+  // Pause automatically when the tab is hidden.
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.hidden && statusRef.current === 'playing') changeStatus('paused')
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+  }, [changeStatus])
 
   const newGame = useCallback(
     (direction) => {
-      let game = createGame()
-      if (direction) game = queueTurn(game, direction)
-      gameRef.current = game
+      simRef.current = createSimulation({ direction })
+      rendererRef.current?.reset()
       setScore(0)
       setNewRecord(false)
       setWon(false)
-      setStatus('playing')
-      draw()
+      changeStatus('playing')
     },
-    [draw],
+    [changeStatus],
   )
 
   const turn = useCallback(
     (direction) => {
-      if (status === 'ready') newGame(direction)
-      else if (status === 'playing') {
-        gameRef.current = queueTurn(gameRef.current, direction)
+      const current = statusRef.current
+      if (current === 'ready') newGame(direction)
+      else if (current === 'playing') {
+        const sim = simRef.current
+        sim.game = queueTurn(sim.game, direction)
       }
     },
-    [status, newGame],
+    [newGame],
   )
 
   const togglePause = useCallback(() => {
-    if (status === 'playing') setStatus('paused')
-    else if (status === 'paused') setStatus('playing')
+    const current = statusRef.current
+    if (current === 'playing') changeStatus('paused')
+    else if (current === 'paused') changeStatus('playing')
     else newGame()
-  }, [status, newGame])
+  }, [changeStatus, newGame])
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -285,15 +220,15 @@ export default function App() {
       if (event.code === 'Space' || event.code === 'KeyP') {
         event.preventDefault()
         togglePause()
-      } else if (event.code === 'Enter' && status !== 'playing') {
+      } else if (event.code === 'Enter' && statusRef.current !== 'playing') {
         event.preventDefault()
-        if (status === 'paused') setStatus('playing')
+        if (statusRef.current === 'paused') changeStatus('playing')
         else newGame()
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [turn, togglePause, newGame, status])
+  }, [turn, togglePause, newGame, changeStatus])
 
   const onTouchStart = (event) => {
     const touch = event.touches[0]
@@ -319,51 +254,62 @@ export default function App() {
         <div className="scores">
           <div className="stat">
             <span className="stat-label">Score</span>
-            <span className="stat-value">{score}</span>
+            {/* Keyed so the pop animation replays on every change. */}
+            <span className="stat-value" key={score}>
+              {score}
+            </span>
           </div>
-          <div className="stat">
+          <div className="stat stat-best">
             <span className="stat-label">Best</span>
-            <span className="stat-value">{best}</span>
+            <span className="stat-value" key={best}>
+              {best}
+            </span>
           </div>
         </div>
       </header>
 
-      <div className="board" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-        <canvas ref={canvasRef} role="img" aria-label={`Snake board, score ${score}`} />
+      <div className="board-frame">
+        <div className="board" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+          <canvas ref={canvasRef} role="img" aria-label={`Snake board, score ${score}`} />
 
-        {status !== 'playing' && (
-          <div className="overlay" aria-live="polite">
-            {status === 'ready' && (
-              <>
-                <h2>Eat. Grow. Don&apos;t crash.</h2>
-                <p>Steer the snake to the red dots. Walls and your own tail end the run.</p>
-                <button type="button" className="primary" onClick={() => newGame()}>
-                  Play
-                </button>
-              </>
-            )}
-            {status === 'paused' && (
-              <>
-                <h2>Paused</h2>
-                <button type="button" className="primary" onClick={() => setStatus('playing')}>
-                  Resume
-                </button>
-              </>
-            )}
-            {status === 'over' && (
-              <>
-                <h2>{won ? 'You filled the board!' : 'Game over'}</h2>
-                <p>
-                  You scored <strong>{score}</strong>.
-                  {newRecord && <span className="record"> New best!</span>}
-                </p>
-                <button type="button" className="primary" onClick={() => newGame()}>
-                  Play again
-                </button>
-              </>
-            )}
-          </div>
-        )}
+          {status !== 'playing' && (
+            <div className={`overlay overlay-${status}`} aria-live="polite">
+              {status === 'ready' && (
+                <>
+                  <h2>Eat. Grow. Survive.</h2>
+                  <p>Chase the glowing orbs. Walls and your own tail end the run.</p>
+                  <button type="button" className="primary" onClick={() => newGame()}>
+                    Play
+                  </button>
+                  <p className="blink on-keys">Press any arrow key</p>
+                </>
+              )}
+              {status === 'paused' && (
+                <>
+                  <h2>Paused</h2>
+                  <button type="button" className="primary" onClick={() => changeStatus('playing')}>
+                    Resume
+                  </button>
+                  <p className="blink on-keys">Press Space</p>
+                </>
+              )}
+              {status === 'over' && (
+                <>
+                  <h2>{won ? 'You win!' : 'Game over'}</h2>
+                  <div className="final">
+                    <span className="final-label">Score</span>
+                    <span className="final-value">{score}</span>
+                  </div>
+                  {newRecord && <p className="record">New best!</p>}
+                  <button type="button" className="primary" onClick={() => newGame()}>
+                    Play again
+                  </button>
+                  <p className="blink on-keys">Press Enter</p>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="controls">

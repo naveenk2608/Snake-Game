@@ -1,6 +1,6 @@
 # Snake
 
-A classic Snake game built with React and Vite. Eat the red dots to grow, and avoid the walls and your own tail. The snake speeds up as your score climbs, and your best score is saved in the browser.
+A neon arcade take on Snake, built with React and Vite. Eat the glowing orbs to grow, and avoid the walls and your own tail. The snake glides smoothly between cells and speeds up as your score climbs. Your best score is saved in the browser. A self-playing demo runs behind the start screen.
 
 ## Run it
 
@@ -24,9 +24,12 @@ The game pauses automatically when you switch tabs.
 
 ## Project layout
 
-- `src/game/snake.js` holds the game rules as pure functions: movement, turning, eating, collisions and speed.
-- `src/App.jsx` draws the board on a canvas and handles input, scoring and the start, pause and game-over screens.
-- `src/index.css` defines the light and dark color themes, including the board colors.
+- `src/game/snake.js` holds the game rules as pure functions: movement, turning, eating, collisions, speed and the demo autopilot.
+- `src/game/renderer.js` draws the board on a canvas: the gliding snake, glow, particles, screen shake and flashes.
+- `src/App.jsx` runs the animation loop and handles input, scoring and the start, pause and game-over screens.
+- `src/index.css` and `src/App.css` hold the neon theme and layout.
+
+The game respects the system "reduce motion" setting by turning off screen shake, the pulsing effects and the animated border.
 
 ## Other scripts
 

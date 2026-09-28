@@ -1,24 +1,33 @@
 .app {
   width: 100%;
-  max-width: 480px;
+  max-width: 500px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
 }
+
+/* ---------- Header ---------- */
 
 .top {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
 }
 
 h1 {
   margin: 0;
-  font-size: 2.25rem;
+  font-family: var(--display);
+  font-size: clamp(2rem, 9vw, 2.75rem);
+  font-weight: 900;
   line-height: 1;
-  letter-spacing: -0.03em;
-  color: var(--text-strong);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: linear-gradient(90deg, var(--cyan), var(--violet) 55%, var(--pink));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 14px rgba(92, 242, 255, 0.35));
 }
 
 .scores {
@@ -30,26 +39,78 @@ h1 {
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-width: 76px;
-  padding: 6px 14px;
+  min-width: 78px;
+  padding: 6px 14px 8px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
+  backdrop-filter: blur(8px);
 }
 
 .stat-label {
-  font-size: 0.7rem;
-  letter-spacing: 0.08em;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--muted);
 }
 
 .stat-value {
-  font-size: 1.3rem;
-  font-weight: 650;
-  line-height: 1.2;
+  display: inline-block;
+  font-family: var(--numeric);
+  font-size: 1.4rem;
+  font-weight: 700;
+  line-height: 1.15;
   color: var(--text-strong);
   font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 12px rgba(92, 242, 255, 0.6);
+  animation: pop 0.35s ease-out;
+}
+
+.stat-best .stat-value {
+  text-shadow: 0 0 12px rgba(255, 79, 216, 0.6);
+}
+
+@keyframes pop {
+  0% {
+    transform: scale(1.4);
+    color: var(--cyan);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ---------- Board ---------- */
+
+@property --angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+/* A slowly rotating neon gradient border around the board. */
+.board-frame {
+  padding: 2px;
+  border-radius: 18px;
+  background: conic-gradient(
+    from var(--angle),
+    var(--cyan),
+    var(--violet),
+    var(--pink),
+    var(--violet),
+    var(--cyan)
+  );
+  box-shadow:
+    0 0 24px rgba(92, 242, 255, 0.22),
+    0 0 64px rgba(167, 112, 255, 0.2);
+  animation: spin 8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    --angle: 360deg;
+  }
 }
 
 .board {
@@ -57,9 +118,8 @@ h1 {
   width: 100%;
   aspect-ratio: 1;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  box-shadow: var(--shadow);
+  border-radius: 16px;
+  background: var(--bg);
   /* Swipes steer the snake instead of scrolling the page. */
   touch-action: none;
   user-select: none;
@@ -72,25 +132,63 @@ h1 {
   height: 100%;
 }
 
+/* Faint CRT scanlines over the playfield. */
+.board::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.025) 0 1px,
+    transparent 1px 3px
+  );
+}
+
 .overlay {
   position: absolute;
   inset: 0;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 14px;
   padding: 24px;
   text-align: center;
-  background: var(--overlay);
+  background: radial-gradient(circle at 50% 45%, rgba(5, 6, 13, 0.45), rgba(5, 6, 13, 0.82));
   backdrop-filter: blur(2px);
+  animation: fade-in 0.25s ease-out;
+}
+
+/* Hold the game-over card back briefly so the crash can play out first. */
+.overlay-over {
+  animation: fade-in 0.35s ease-out 0.6s both;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
 }
 
 .overlay h2 {
   margin: 0;
-  font-size: 1.6rem;
-  letter-spacing: -0.02em;
+  font-family: var(--display);
+  font-size: clamp(1.2rem, 5.5vw, 1.7rem);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--text-strong);
+  text-shadow:
+    0 0 10px rgba(92, 242, 255, 0.7),
+    0 0 30px rgba(92, 242, 255, 0.35);
+}
+
+.overlay-over h2 {
+  text-shadow:
+    0 0 10px rgba(255, 59, 92, 0.8),
+    0 0 30px rgba(255, 59, 92, 0.4);
 }
 
 .overlay p {
@@ -98,62 +196,127 @@ h1 {
   margin: 0;
 }
 
-.overlay strong {
+.final {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.final-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.final-value {
+  font-family: var(--numeric);
+  font-size: 3.25rem;
+  font-weight: 900;
+  line-height: 1.1;
   color: var(--text-strong);
+  text-shadow: 0 0 18px rgba(92, 242, 255, 0.7);
 }
 
 .record {
-  font-weight: 600;
-  color: var(--accent-strong);
+  padding: 3px 12px;
+  font-family: var(--display);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gold);
+  border: 1px solid rgba(255, 213, 74, 0.5);
+  border-radius: 999px;
+  box-shadow: 0 0 16px rgba(255, 213, 74, 0.3);
 }
+
+.blink {
+  font-family: var(--display);
+  font-size: 0.7rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  animation: blink 1.2s steps(2, start) infinite;
+}
+
+@keyframes blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+/* ---------- Buttons ---------- */
 
 button {
   font: inherit;
   cursor: pointer;
   border: 1px solid transparent;
-  border-radius: 10px;
   transition:
     background-color 0.15s,
-    border-color 0.15s;
+    border-color 0.15s,
+    box-shadow 0.15s,
+    transform 0.15s;
 }
 
 button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline: 2px solid var(--cyan);
+  outline-offset: 3px;
 }
 
 .primary {
-  margin-top: 4px;
-  padding: 10px 32px;
-  font-weight: 600;
-  color: var(--accent-contrast);
-  background: var(--accent);
+  padding: 12px 36px;
+  font-family: var(--display);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #05060d;
+  background: linear-gradient(90deg, var(--cyan), var(--violet));
+  border-radius: 999px;
+  box-shadow:
+    0 0 22px rgba(92, 242, 255, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.3);
 }
 
 .primary:hover {
-  background: var(--accent-strong);
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 34px rgba(92, 242, 255, 0.7),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+}
+
+.primary:active {
+  transform: translateY(0);
 }
 
 .controls {
   display: flex;
-  gap: 8px;
+  gap: 10px;
 }
 
 .secondary {
   flex: 1;
-  padding: 8px 12px;
+  padding: 10px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
   color: var(--text-strong);
   background: var(--surface);
   border-color: var(--border);
+  border-radius: 12px;
+  backdrop-filter: blur(8px);
 }
 
 .secondary:hover:not(:disabled) {
-  border-color: var(--accent);
+  background: var(--surface-hover);
+  border-color: var(--cyan);
+  box-shadow: 0 0 16px rgba(92, 242, 255, 0.25);
 }
 
 .secondary:disabled {
   cursor: default;
-  opacity: 0.5;
+  opacity: 0.4;
 }
 
 /* On-screen arrows, shown only on touch-first devices. */
@@ -163,7 +326,7 @@ button:focus-visible {
   grid-template-areas:
     '. up .'
     'left down right';
-  gap: 8px;
+  gap: 10px;
   justify-content: center;
 }
 
@@ -171,15 +334,17 @@ button:focus-visible {
   display: grid;
   place-items: center;
   height: 60px;
-  color: var(--text-strong);
+  color: var(--cyan);
   background: var(--surface);
   border-color: var(--border);
+  border-radius: 14px;
   touch-action: manipulation;
 }
 
 .dpad button:active {
-  color: var(--accent-contrast);
-  background: var(--accent);
+  color: #05060d;
+  background: linear-gradient(135deg, var(--cyan), var(--violet));
+  box-shadow: 0 0 20px rgba(92, 242, 255, 0.5);
 }
 
 .dpad .up {
@@ -197,26 +362,36 @@ button:focus-visible {
 
 .hint {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: 0.85rem;
   text-align: center;
   color: var(--muted);
 }
 
 kbd {
-  padding: 1px 6px;
-  font: 0.8rem ui-monospace, Consolas, monospace;
-  color: var(--text-strong);
+  padding: 2px 7px;
+  font: 0.75rem ui-monospace, Consolas, monospace;
+  color: var(--cyan);
   background: var(--surface);
   border: 1px solid var(--border);
   border-bottom-width: 2px;
-  border-radius: 5px;
+  border-radius: 6px;
 }
 
 @media (hover: none) and (pointer: coarse) {
   .dpad {
     display: grid;
   }
-  .hint {
+  .hint,
+  .on-keys {
     display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-frame,
+  .stat-value,
+  .overlay,
+  .blink {
+    animation: none;
   }
 }

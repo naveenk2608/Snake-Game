@@ -1,52 +1,26 @@
+/* Neon arcade theme. The game is dark by design, so there is one palette. */
 :root {
-  --bg: #f6f4ef;
-  --surface: #ffffff;
-  --text: #4a4658;
-  --text-strong: #15131c;
-  --muted: #7c7788;
-  --border: #e3e0d8;
-  --accent: #2f9e5b;
-  --accent-strong: #237a46;
-  --accent-contrast: #ffffff;
-  --overlay: rgba(246, 244, 239, 0.84);
-  --shadow: 0 12px 32px -14px rgba(20, 20, 40, 0.3);
+  --bg: #05060d;
+  --surface: rgba(20, 24, 52, 0.55);
+  --surface-hover: rgba(32, 38, 80, 0.7);
+  --border: rgba(129, 140, 248, 0.22);
+  --text: #b9bfe0;
+  --text-strong: #f4f6ff;
+  --muted: #7c84ad;
+  --cyan: #5cf2ff;
+  --violet: #a770ff;
+  --pink: #ff4fd8;
+  --red: #ff3b5c;
+  --gold: #ffd54a;
 
-  /* Board palette, read by the canvas renderer. */
-  --board: #eaf4e4;
-  --board-alt: #e0edd8;
-  --snake: #3fae6a;
-  --snake-head: #1f7a45;
-  --food: #e5484d;
-  --crash: #c2410c;
-
+  --display: 'Orbitron', system-ui, 'Segoe UI', sans-serif;
+  /* Orbitron slashes its zeros, so numbers use Oxanium. */
+  --numeric: 'Oxanium', system-ui, 'Segoe UI', sans-serif;
   font: 16px/1.5 system-ui, 'Segoe UI', Roboto, sans-serif;
-  color-scheme: light dark;
+  color-scheme: dark;
   color: var(--text);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #121317;
-    --surface: #1b1d23;
-    --text: #b7b4c2;
-    --text-strong: #f2f1f6;
-    --muted: #8a8796;
-    --border: #2c2e37;
-    --accent: #4cc47d;
-    --accent-strong: #6fd898;
-    --accent-contrast: #0c1a12;
-    --overlay: rgba(18, 19, 23, 0.82);
-    --shadow: 0 12px 32px -14px rgba(0, 0, 0, 0.7);
-
-    --board: #182419;
-    --board-alt: #1c2b1e;
-    --snake: #4cc47d;
-    --snake-head: #a3ecbf;
-    --food: #ff6b6b;
-    --crash: #ffa94d;
-  }
 }
 
 *,
@@ -58,7 +32,11 @@
 body {
   margin: 0;
   min-height: 100svh;
-  background: var(--bg);
+  background:
+    radial-gradient(60rem 40rem at 10% -10%, rgba(92, 242, 255, 0.12), transparent 60%),
+    radial-gradient(50rem 40rem at 110% 0%, rgba(167, 112, 255, 0.16), transparent 60%),
+    radial-gradient(60rem 45rem at 50% 115%, rgba(255, 79, 216, 0.1), transparent 60%),
+    var(--bg);
 }
 
 #root {

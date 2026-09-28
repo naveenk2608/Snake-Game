@@ -92,3 +92,34 @@ export function step(game, random = Math.random) {
 export function tickDuration(score) {
   return Math.max(60, 150 - score * 4)
 }
+
+// A simple greedy driver for the attract-mode demo on the start screen: head
+// toward the food, and never steer into a wall or the body if a safe move exists.
+export function autopilot(game) {
+  const head = game.snake[0]
+  const current = game.turns.at(-1) ?? game.direction
+  // The tail moves out of the way on the next tick, so it is not an obstacle.
+  const blocked = game.snake.slice(0, -1)
+  const nextCell = (direction) => ({
+    x: head.x + DIRECTIONS[direction].x,
+    y: head.y + DIRECTIONS[direction].y,
+  })
+  const safe = Object.keys(DIRECTIONS).filter((direction) => {
+    if (direction === OPPOSITE[current]) return false
+    const cell = nextCell(direction)
+    const inside = cell.x >= 0 && cell.y >= 0 && cell.x < GRID_SIZE && cell.y < GRID_SIZE
+    return inside && !blocked.some((part) => samePoint(part, cell))
+  })
+  if (safe.length === 0) return current
+  if (!game.food) return safe[0]
+
+  const distance = (direction) => {
+    const cell = nextCell(direction)
+    return Math.abs(cell.x - game.food.x) + Math.abs(cell.y - game.food.y)
+  }
+  // Prefer going straight on ties so the demo snake moves in clean lines.
+  return safe.reduce((best, direction) => {
+    const diff = distance(direction) - distance(best)
+    return diff < 0 || (diff === 0 && direction === current) ? direction : best
+  })
+}
